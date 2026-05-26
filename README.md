@@ -1,73 +1,66 @@
-# Pipeline de Ventes
+# Scraper books.toscrape.com
 
-Pipeline ETL qui traite des données de ventes brutes pour produire des rapports agrégés par région.
+Pipeline de scraping qui collecte les 1 000 livres du site en moins de 11 secondes et les exporte en CSV.
 
-## Objectif
+## Lancer avec Docker
 
-Transformer un fichier CSV de ventes brutes (avec données manquantes et invalides) en deux fichiers propres :
-- les ventes nettoyées avec le chiffre d'affaires calculé
-- un résumé agrégé par région
-
-## Architecture
-
-```
-session3/
-├── data/
-│   ├── raw/
-│   │   └── ventes.csv             # Données brutes en entrée
-│   └── processed/
-│       ├── ventes_nettoyees.csv   # Données nettoyées (output)
-│       └── resume_par_region.csv  # Agrégat par région (output)
-├── src/
-│   ├── extract.py     # Lecture du fichier CSV
-│   ├── transform.py   # Nettoyage, calcul CA, agrégation
-│   └── load.py        # Sauvegarde des résultats
-├── pipeline.py        # Point d'entrée principal
-├── requirements.txt
-├── Dockerfile
-└── README.md
+```bash
+./run.sh
 ```
 
-## Description des données
+Le container démarre, cron scrape le site entier toutes les minutes et écrit dans `data/books.csv`.
 
-| Colonne         | Type    | Description                         |
-|-----------------|---------|-------------------------------------|
-| id              | int     | Identifiant unique de la commande   |
-| date            | string  | Date de la vente (YYYY-MM-DD)       |
-| region          | string  | Région de la vente                  |
-| produit         | string  | Nom du produit vendu                |
-| quantite        | float   | Quantité vendue (peut être vide)    |
-| prix_unitaire   | float   | Prix unitaire (doit être > 0)       |
-| client          | string  | Nom du client                       |
+```bash
+docker logs -f session3_scraper   # logs en temps réel
+```
 
-## Lancer le pipeline
-
-### En local
+## Lancer sans Docker
 
 ```bash
 pip install -r requirements.txt
-python pipeline.py
+python scraper.py --max-pages 0 --workers 50 --output data/books.csv
 ```
 
-### Avec Docker
+## Options
 
-```bash
-docker build -t pipeline-ventes .
-docker run pipeline-ventes
-docker logs <container_id>
+| Option | Défaut | Description |
+|--------|--------|-------------|
+| `--output` | `data/books.csv` | Chemin du fichier CSV |
+| `--max-pages` | `0` | Nb de pages catalogue (0 = tout le site, 50 pages) |
+| `--workers` | `50` | Threads parallèles |
+
+## Comment ça fonctionne
+
+**Phase 1 — Catalogue (50 requêtes en parallèle)**
+Les URLs des 50 pages catalogue sont prévisibles (`page-1.html` → `page-50.html`), donc téléchargées simultanément. Durée : ~1.6s.
+
+**Phase 2 — Fiches livres (1 000 requêtes en parallèle)**
+Les 1 000 URLs collectées en Phase 1 sont toutes soumises d'un coup au pool de workers. Durée : ~8.6s.
+
+**Total : 1 050 requêtes HTTP en < 11 secondes.**
+
+## Structure des fichiers
+
+```
+session3/
+├── scraper.py          # Pipeline principal (2 phases parallèles)
+├── Dockerfile          # Image Python 3.11 + cron
+├── docker-compose.yaml # Monte ./data:/data pour persister le CSV
+├── entrypoint.sh       # Lance cron + tail -f sur les logs
+├── crontab             # Exécution toutes les minutes
+├── requirements.txt    # requests, beautifulsoup4
+├── run.sh              # docker compose up --build -d
+└── data/
+    └── books.csv       # Généré automatiquement
 ```
 
-## Exemple de logs
+## Format du CSV
 
 ```
-2024-01-01 10:00:00 | INFO | ==================================================
-2024-01-01 10:00:00 | INFO | PIPELINE DEMARRE
-2024-01-01 10:00:00 | INFO | ==================================================
-2024-01-01 10:00:00 | INFO | [EXTRACT] 20 lignes chargees en 0.01s
-2024-01-01 10:00:00 | INFO | [TRANSFORM] 2 lignes supprimees | 18 lignes conservees (0.00s)
-2024-01-01 10:00:00 | INFO | [TRANSFORM] Chiffre d'affaires total : 15849.58 euros
-2024-01-01 10:00:00 | INFO | [TRANSFORM] 5 regions trouvees
-2024-01-01 10:00:00 | INFO | [LOAD] 18 lignes sauvegardees en 0.00s
-2024-01-01 10:00:00 | INFO | [LOAD] 5 lignes sauvegardees en 0.00s
-2024-01-01 10:00:00 | INFO | PIPELINE TERMINE en 0.05s
+title,price,rating,category,date
+A Light in the Attic,£51.77,3,Poetry,2026-05-19
+Tipping the Velvet,£53.74,1,Historical Fiction,2026-05-19
+...
 ```
+
+Le fichier est réinitialisé à chaque run (pas d'accumulation).
