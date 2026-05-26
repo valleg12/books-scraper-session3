@@ -1,0 +1,7 @@
+services:
+  books-scraper:
+    build: .
+    container_name: session3_scraper
+    restart: unless-stopped   # redémarre automatiquement si le container crash ou si Docker redémarre
+    volumes:
+      - ./data:/data           # les fichiers books.csv et scraper.log sont persistés localement

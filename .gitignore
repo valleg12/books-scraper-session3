@@ -1,0 +1,18 @@
+# Données scrapées — ne pas versionner (trop volumineuses, régénérables)
+data/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environnements virtuels
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+
+# Logs locaux
+*.log

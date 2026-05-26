@@ -1,0 +1,53 @@
+name: Books Scraper CI
+
+# Déclencheurs :
+#   - Automatique : tous les jours à 8h UTC
+#   - Manuel      : bouton "Run workflow" sur GitHub
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Récupérer le code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Installer Python 3.11
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 3. Installer les dépendances (requests, beautifulsoup4)
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 4. Lancer le scraper — site entier, 50 workers
+      - name: Run scraper
+        run: python scraper.py --max-pages 0 --workers 50 --output books.csv
+
+      # 5. Vérifier le résultat : on attend 1000 livres minimum
+      - name: Check results
+        run: |
+          LINES=$(wc -l < books.csv)
+          BOOKS=$((LINES - 1))
+          echo "Livres collectes : $BOOKS"
+          if [ "$BOOKS" -lt 1000 ]; then
+            echo "ECHEC : attendu 1000 livres, obtenu $BOOKS"
+            exit 1
+          fi
+          echo "SUCCES : $BOOKS livres scrapes sans erreur"
+
+      # 6. Sauvegarder le CSV comme artefact téléchargeable (7 jours)
+      - name: Upload books.csv
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: books-${{ github.run_number }}
+          path: books.csv
+          retention-days: 7

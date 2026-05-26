@@ -1,0 +1,5 @@
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Toutes les minutes : scrape le site entier (50 pages, 1000 livres) en < 11s avec 50 workers
+* * * * * root /usr/local/bin/python3 /app/scraper.py --output /data/books.csv --max-pages 0 --workers 50 >> /data/scraper.log 2>&1
